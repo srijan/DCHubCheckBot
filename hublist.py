@@ -4,6 +4,7 @@
 from botclass import *
 from func import *
 import socket
+import select
 
 socket.setdefaulttimeout(0.02)
 
@@ -26,16 +27,19 @@ class HubCheckBot(PyBot):
             self.serversocket.connect((self.HOST,self.PORT))
         except Exception:
             return False
-        while True:
-            t = readsock(self.serversocket)
-            if t != '':
-                if t[0] == '$':
-                    hubmsg = t.split()
-                    if hubmsg[0] == '$Lock':
-                        self.serversocket.send('$Key '+lock2key2(hubmsg[1]) + '|' + '$ValidateNick ' + self.botnick + '|')
-                    if hubmsg[0] == '$Hello':
-                        self.serversocket.close()
-                        return True
+        ready = select.select([self.serversocket],[],[],1)
+        if ready[0]:
+            while True:
+                t = readsock(self.serversocket)
+                if t != '':
+                    if t[0] == '$':
+                        hubmsg = t.split()
+                        if hubmsg[0] == '$Lock':
+                            self.serversocket.send('$Key '+lock2key2(hubmsg[1]) + '|' + '$ValidateNick ' + self.botnick + '|')
+                        if hubmsg[0] == '$Hello':
+                            self.serversocket.close()
+                            return True
+        return False
 
 
 def checkHub(host,port):
