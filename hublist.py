@@ -37,18 +37,22 @@ class HubCheckBot(PyBot):
         except Exception,e:
             self.serversocket.close()
             return False
-        ready = select.select([self.serversocket],[],[],1)
-        if ready[0]:
-            while True:
+        while True:
+            ready = select.select([self.serversocket],[],[],1)
+            print "select.select"
+            if ready[0]:
                 t = readsock(self.serversocket)
                 if t != '':
                     if t[0] == '$':
+                        print t
                         hubmsg = t.split()
                         if hubmsg[0] == '$Lock':
                             self.serversocket.send('$Key '+lock2key2(hubmsg[1]) + '|' + '$ValidateNick ' + self.botnick + '|')
                         if hubmsg[0] == '$Hello':
                             self.serversocket.close()
                             return True
+            else:
+                break
         self.serversocket.close()
         return False
 
@@ -106,8 +110,8 @@ subnetList = [
                 "172.16.19.0/24",   "172.16.20.0/24",   "172.17.1.0/24",
                 "172.17.2.0/24",    "172.17.3.0/24",    "172.17.4.0/24",
                 "172.17.5.0/24",    "172.17.6.0/24",    "172.17.7.0/24",
-                "172.17.8.0/24",    "172.17.9.0/24",    "172.17.10.0/24",
-                "172.17.11.0/24",   "172.17.12.0/24",   "172.17.13.0/24"
+                "172.17.8.0/24",    "172.17.9.0/24",    "172.17.10.0/24"#,
+                #"172.17.11.0/24",   "172.17.12.0/24",   "172.17.13.0/24"
              ]
 fileName = '/srv/http/hublist.txt'
 
@@ -118,7 +122,7 @@ def checkHub(host,port):
 
 def addToDb(ip):
     print "Adding ",ip
-    rc.sadd("hublist",ip)
+    rc.zadd("hublist",1,ip)
 
 def generateMainList():
     for subnet in subnetList:
@@ -129,13 +133,16 @@ def generateMainList():
 def checkMainList():
     h = HubCheckBot()
     serverList = ["","Auto Updated HubList",""]
-    for ip in rc.smembers("hublist"):
-        print ip
+    for entry in rc.zrevrange("hublist",0,-1,'withscores'):
+        ip = entry[0]
+        score = entry[1]
+        print ip,score
         h.initBot(ip,411)
         hub = h.getHubDetails()
-        serverLine = "dchub://"+str(ip)+"/\t:\t"+hub['name']
+        serverLine = "dchub://" + str(ip) + "/\t[Score " + str(score) + "]\t:\t" + hub['name']
         if hub['active']:
             serverLine += " (Online)"
+            rc.zincrby("hublist",ip,0.1)
         else:
             serverLine += " (Offline)"
         serverList.append(serverLine)
