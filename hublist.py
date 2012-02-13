@@ -8,6 +8,7 @@ import select
 import redis
 from netaddr import IPNetwork
 import string
+import time
 
 rc = redis.StrictRedis()
 socket.setdefaulttimeout(0.02)
@@ -52,28 +53,29 @@ class HubCheckBot(PyBot):
         return False
 
     def getHubDetails(self):
-        hub = dict({'active': True, 'name': "", 'users': 0, 'ops': 0})
+        hub = dict({'active': False, 'name': "", 'users': 0, 'ops': 0})
         try:
             self.serversocket.connect((self.HOST,self.PORT))
         except Exception,e:
             self.serversocket.close()
-            hub['active'] = False
             return hub
-        ready = select.select([self.serversocket],[],[],1)
-        if ready[0]:
-            while True:
+        while True:
+            ready = select.select([self.serversocket],[],[],1)
+            if ready[0]:
                 t = readsock(self.serversocket)
-                #print t
                 if t != '':
                     if t[0] == '$':
+                        #print t
                         hubmsg = t.split()
                         if hubmsg[0] == '$Lock':
                             self.serversocket.send('$Key '+lock2key2(hubmsg[1]) + '|' + '$ValidateNick ' + self.botnick + '|')
+                            hub['active'] = True
                         if hubmsg[0] == '$HubName':
                             hub['name'] = string.join(hubmsg[1:])
+                            hub['active'] = True
                         if hubmsg[0] == '$Hello':
-                            self.serversocket.close()
-                            return hub
+                            hub['active'] = True
+                            break
                             #self.serversocket.send('$Version 0.785|$MyINFO $ALL '+self.botnick+'$ $100$bot@bot.com$'+str(self.sharesize)+'|$GetNickList|')
                         """
                         if hubmsg[0]=='$NickList':
@@ -88,14 +90,10 @@ class HubCheckBot(PyBot):
                             self.serversocket.close()
                             return hub
                         """
+            else:
+                break
         self.serversocket.close()
-        hub['active'] = False
         return hub
-
-def checkHub(host,port):
-    hcb = HubCheckBot()
-    hcb.initBot(host,port)
-    return hcb.check()
 
 
 subnetList = [
@@ -111,6 +109,12 @@ subnetList = [
                 "172.17.8.0/24",    "172.17.9.0/24",    "172.17.10.0/24",
                 "172.17.11.0/24",   "172.17.12.0/24",   "172.17.13.0/24"
              ]
+fileName = '/srv/http/hublist.txt'
+
+def checkHub(host,port):
+    hcb = HubCheckBot()
+    hcb.initBot(host,port)
+    return hcb.check()
 
 def addToDb(ip):
     print "Adding ",ip
@@ -124,17 +128,30 @@ def generateMainList():
 
 def checkMainList():
     h = HubCheckBot()
+    serverList = ["","Auto Updated HubList",""]
     for ip in rc.smembers("hublist"):
+        print ip
         h.initBot(ip,411)
         hub = h.getHubDetails()
-        print ip,"\t:\t",hub['name'],
+        serverLine = "dchub://"+str(ip)+"/\t:\t"+hub['name']
         if hub['active']:
-            print " (Online)"
+            serverLine += " (Online)"
         else:
-            print " (Offline)"
+            serverLine += " (Offline)"
+        serverList.append(serverLine)
+    serverList.append("")
+    serverList.append("Last updated at: "+time.strftime('%I:%M %p, %b %d, %Y'))
+    serverList.append("Anyone interested in the code can look here: https://github.com/srijan/DCHubCheckBot")
+    print time.strftime('%I:%M %p, %b %d, %Y'), '-- MARK --'
+    f = open(fileName, "w")
+    for s in serverList:
+        f.write(s)
+        f.write('\n')
+    f.close()
 
-
-checkMainList()
+while True:
+    checkMainList()
+    time.sleep(600)
 
 #print checkHub("172.16.12.39",411)
 #generateMainList()
