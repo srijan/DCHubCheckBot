@@ -139,12 +139,13 @@ def checkMainList():
         print ip,score
         h.initBot(ip,411)
         hub = h.getHubDetails()
-        serverLine = "dchub://" + str(ip) + "/\t[Score " + str(score) + "]\t:\t" + hub['name']
+        serverLine = "dchub://" + str(ip) + "/\t[Score " + str(score) + "]\t("
         if hub['active']:
-            serverLine += " (Online)"
+            serverLine += "On"
             rc.zincrby("hublist",ip,0.1)
         else:
-            serverLine += " (Offline)"
+            serverLine += "Off"
+        serverLine += "line)\t" + hub['name']
         serverList.append(serverLine)
     serverList.append("")
     serverList.append("Last updated at: "+time.strftime('%I:%M %p, %b %d, %Y'))
