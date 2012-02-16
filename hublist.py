@@ -184,8 +184,13 @@ def checkMainList():
         f.write('\n')
     f.close()
 
+count = 0
 while True:
+    if count == 6:
+        generateMainList()
+        count = 0
     checkMainList()
+    count+=1
     time.sleep(600)
 
 #print checkHub("172.16.12.39",411)
