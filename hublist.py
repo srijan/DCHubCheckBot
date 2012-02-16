@@ -9,9 +9,16 @@ import redis
 from netaddr import IPNetwork
 import string
 import time
+import signal
 
 rc = redis.StrictRedis()
-socket.setdefaulttimeout(0.02)
+socket.setdefaulttimeout(0.05)
+
+class TimeoutException(Exception):
+    pass
+
+def timeout_handler(signum,frame):
+    raise TimeoutException()
 
 class HubCheckBot(PyBot):
     botnick = "HubCheckBot"
@@ -37,22 +44,32 @@ class HubCheckBot(PyBot):
         except Exception,e:
             self.serversocket.close()
             return False
-        while True:
-            ready = select.select([self.serversocket],[],[],1)
-            print "select.select"
-            if ready[0]:
-                t = readsock(self.serversocket)
-                if t != '':
-                    if t[0] == '$':
-                        print t
-                        hubmsg = t.split()
-                        if hubmsg[0] == '$Lock':
-                            self.serversocket.send('$Key '+lock2key2(hubmsg[1]) + '|' + '$ValidateNick ' + self.botnick + '|')
-                        if hubmsg[0] == '$Hello':
-                            self.serversocket.close()
-                            return True
-            else:
-                break
+
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(600)   # trigger alarm in 10 mins
+
+        try:
+            while True:
+                ready = select.select([self.serversocket],[],[],1)
+                #print "select.select"
+                if ready[0]:
+                    t = readsock(self.serversocket)
+                    if t != '':
+                        if t[0] == '$':
+                            #print t
+                            hubmsg = t.split()
+                            if hubmsg[0] == '$Lock':
+                                self.serversocket.send('$Key '+lock2key2(hubmsg[1]) + '|' + '$ValidateNick ' + self.botnick + '|')
+                            if hubmsg[0] == '$Hello':
+                                self.serversocket.close()
+                                return True
+                else:
+                    break
+        except TimeoutException:
+            print "Unending loop detected.. Exiting.."
+        finally:
+            signal.signal(signal.SIGALRM, old_handler)
+
         self.serversocket.close()
         return False
 
@@ -63,39 +80,49 @@ class HubCheckBot(PyBot):
         except Exception,e:
             self.serversocket.close()
             return hub
-        while True:
-            ready = select.select([self.serversocket],[],[],1)
-            if ready[0]:
-                t = readsock(self.serversocket)
-                if t != '':
-                    if t[0] == '$':
-                        #print t
-                        hubmsg = t.split()
-                        if hubmsg[0] == '$Lock':
-                            self.serversocket.send('$Key '+lock2key2(hubmsg[1]) + '|' + '$ValidateNick ' + self.botnick + '|')
-                            hub['active'] = True
-                        if hubmsg[0] == '$HubName':
-                            hub['name'] = string.join(hubmsg[1:])
-                            hub['active'] = True
-                        if hubmsg[0] == '$Hello':
-                            hub['active'] = True
-                            break
-                            #self.serversocket.send('$Version 0.785|$MyINFO $ALL '+self.botnick+'$ $100$bot@bot.com$'+str(self.sharesize)+'|$GetNickList|')
-                        """
-                        if hubmsg[0]=='$NickList':
-                            nicklist = hubmsg[1].split("$$")
-                            hub['users'] = len(nicklist)
-                        if hubmsg[0]=='$OpList':
-                            oplist = hubmsg[1].split("$$")
-                            hub['ops'] = len(oplist)
-                            self.serversocket.close()
-                            return hub
-                        if hubmsg[0]=='$Search':
-                            self.serversocket.close()
-                            return hub
-                        """
-            else:
-                break
+
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(10)   # trigger alarm in 10 seconds
+
+        try:
+            while True:
+                ready = select.select([self.serversocket],[],[],1)
+                if ready[0]:
+                    t = readsock(self.serversocket)
+                    if t != '':
+                        if t[0] == '$':
+                            #print t
+                            hubmsg = t.split()
+                            if hubmsg[0] == '$Lock':
+                                self.serversocket.send('$Key '+lock2key2(hubmsg[1]) + '|' + '$ValidateNick ' + self.botnick + '|')
+                                hub['active'] = True
+                            if hubmsg[0] == '$HubName':
+                                hub['name'] = string.join(hubmsg[1:])
+                                hub['active'] = True
+                            if hubmsg[0] == '$Hello':
+                                hub['active'] = True
+                                break
+                                #self.serversocket.send('$Version 0.785|$MyINFO $ALL '+self.botnick+'$ $100$bot@bot.com$'+str(self.sharesize)+'|$GetNickList|')
+                            """
+                            if hubmsg[0]=='$NickList':
+                                nicklist = hubmsg[1].split("$$")
+                                hub['users'] = len(nicklist)
+                            if hubmsg[0]=='$OpList':
+                                oplist = hubmsg[1].split("$$")
+                                hub['ops'] = len(oplist)
+                                self.serversocket.close()
+                                return hub
+                            if hubmsg[0]=='$Search':
+                                self.serversocket.close()
+                                return hub
+                            """
+                else:
+                    break
+        except TimeoutException:
+            print "Unending loop detected.. Exiting.."
+        finally:
+            signal.signal(signal.SIGALRM, old_handler)
+
         self.serversocket.close()
         return hub
 
@@ -107,10 +134,10 @@ subnetList = [
                 "172.16.10.0/24",   "172.16.11.0/24",   "172.16.12.0/24",
                 "172.16.13.0/24",   "172.16.14.0/24",   "172.16.15.0/24",
                 "172.16.16.0/24",   "172.16.17.0/24",   "172.16.18.0/24",
-                "172.16.19.0/24",   "172.16.20.0/24",   "172.17.1.0/24",
-                "172.17.2.0/24",    "172.17.3.0/24",    "172.17.4.0/24",
-                "172.17.5.0/24",    "172.17.6.0/24",    "172.17.7.0/24",
-                "172.17.8.0/24",    "172.17.9.0/24",    "172.17.10.0/24"#,
+                "172.16.19.0/24",   "172.16.20.0/24"#,   "172.17.1.0/24",
+                #"172.17.2.0/24",    "172.17.3.0/24",    "172.17.4.0/24",
+                #"172.17.5.0/24",    "172.17.6.0/24",    "172.17.7.0/24",
+                #"172.17.8.0/24",    "172.17.9.0/24",    "172.17.10.0/24"#,
                 #"172.17.11.0/24",   "172.17.12.0/24",   "172.17.13.0/24"
              ]
 fileName = '/srv/http/hublist.txt'
