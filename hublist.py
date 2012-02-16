@@ -70,6 +70,7 @@ class HubCheckBot(PyBot):
         finally:
             signal.signal(signal.SIGALRM, old_handler)
 
+        signal.alarm(0)
         self.serversocket.close()
         return False
 
@@ -123,6 +124,7 @@ class HubCheckBot(PyBot):
         finally:
             signal.signal(signal.SIGALRM, old_handler)
 
+        signal.alarm(0)
         self.serversocket.close()
         return hub
 
